@@ -1,3 +1,7 @@
+LogisticRegression/data
+LogisticRegression/bayesian-coresets
+coresetEnv/
+papers/
 # Dataset of 20k+ cat and dog images:
 kMeans/Datasets/Catdog/
 
