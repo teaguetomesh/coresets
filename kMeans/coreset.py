@@ -68,6 +68,35 @@ def Algorithm2(data_vectors, k, B, m):
     return [data_vectors[i] for i in chosen_indices], weights
 
 
+def BFL16(P, B, m):
+    """Algorithm 2 in https://arxiv.org/pdf/1612.00889.pdf [BFL16].
+    Per Table 1, the coreset size is O(k^2 logk / eps^3) or O(dk logk / eps^2)
+    Note that D(p, q) appears to be the squared distance dist(p, q) ** 2 (top of pg 23)
+    We're using the best of N k-means++ initializations for the (alpha, beta) approximation.
+    P is the list of points, B is a list of k-means++ cluster center initializations.
+    """
+
+    num_points_in_clusters = {i: 0 for i in range(len(B))}
+    sum_distance_to_closest_cluster = 0
+    for p in P:
+        _, closest_index = dist_to_B(p, B, return_closest_index=True)
+        num_points_in_clusters[closest_index] += 1
+        sum_distance_to_closest_cluster += dist_to_B(p, B) ** 2
+
+    Prob = np.zeros(len(P))
+    for i, p in enumerate(P):
+        _, closest_index = dist_to_B(p, B, return_closest_index=True)
+        Prob[i] += dist_to_B(p, B) ** 2 / (2 * sum_distance_to_closest_cluster)
+        Prob[i] += 1 / (2 * len(B) * num_points_in_clusters[closest_index])
+
+    assert 0.999 <= sum(Prob) <= 1.001, 'sum(Prob) = %s; the algorithm should automatically '\
+            'normalize Prob by construction' % sum(Prob)
+    chosen_indices = np.random.choice(len(P), size=m, p=Prob)
+    weights = [1 / (m * Prob[i]) for i in chosen_indices]
+
+    return [P[i] for i in chosen_indices], weights
+
+
 def get_cost(data_vectors, B):
     cost = 0
     for x in data_vectors:
