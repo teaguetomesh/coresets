@@ -2,8 +2,8 @@ LogisticRegression/data
 LogisticRegression/bayesian-coresets
 coresetEnv/
 papers/
-# Dataset of 20k+ cat and dog images:
 kMeans/Datasets/Catdog/
+kMeans/Datasets/val2017/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
