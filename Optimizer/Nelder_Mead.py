@@ -16,7 +16,6 @@ done (mod 2*pi).
 
 '''
 
-import vqeTools
 import random as rand
 import math
 import sys
@@ -159,48 +158,46 @@ def nelder_mead(func, x_start,
 
 
 # Minimize the measured energy
-def minimizeEnergyObjective(hamiltonian, numQubits, ansatzModule, refCircuit,
-                            msrCircuits, prevParam, num_parameters):
+def minimizeEnergyObjective(f, init_params, num_params, delta, tol,
+                            no_improv_break, max_iter):
     '''
     Initialize parameters for and then call the Nelder-Mead optimization
     function
-
-        @param hamiltonian (List): List representation of Hamiltonian
-        @param numQubits (int): number of qubits in the simulation
-        @param ansatzModule (module): python module containing a script to
-                        generate an ansatz circuit given a vector of parameters
-        @param refCircuit, msrCircuits (QuantumCircuit): precomputed circuits
-            which produce the reference state and the necessary measurements for
-            this particular Hamiltonian.
-
-        return: tuple (best parameter vector and best energy found)
+    return: tuple (best parameter vector and best energy found)
     '''
 
+    """
     def f(params):
         '''
         Function handle which can be passed to the Nelder-Mead optimization
-        algorithm. Compiles an ansatz circuit using the input parameters,
-        combines the 3 different circuit modules together, then measures the
-        expected energy.
+        algorithm. Compiles a qaoa circuit using the input parameters, then
+        measures the expected energy.
         '''
-        # Generate a circuit for the ansatz
-        ansCircuit = vqeTools.genAnsatz(ansatzModule, numQubits, params)
+        gamma, beta = params
+        # Generate a circuit for the qaoa
+        circ, _ = kq.gen_complete_qaoa_circ(P, [gamma], [beta], G,
+                                            topology=topology)
 
-        circList = vqeTools.constructQuantumCircuit(refCircuit, ansCircuit, msrCircuits)
+        if len(topology) != 0:
+            reorder = True
+        else:
+            reorder = False
 
-        # Energy integration
-        energy = vqeTools.hamiltonianAveraging(circList, hamiltonian, numQubits)
+        # Compute the cost function
+        shots = 8192
+        energy = kq.sim_and_evaluate(circ, G, shots, reorder, device=device)
         #print(energy)
 
         return energy
-
+    """
 
     ### Start of Nelder-Mead simplex optimization ###
-    if prevParam is None:
-        initialparams = [rand.uniform(0,2*math.pi) for i in range(num_parameters)]
+    if init_params is None:
+        initialparams = [rand.uniform(0,2*math.pi) for i in range(num_params)]
     else:
-        initialparams = prevParam
-    final = nelder_mead(f, initialparams)
+        initialparams = init_params
+    final = nelder_mead(f, initialparams, delta=delta, tol=tol,
+                no_improv_break=no_improv_break, max_iter=max_iter)
     print('Best parameters: {}'.format(final[0]))
     print('Best energy: {0:.7f}'.format(final[1]))
     return final
