@@ -16,6 +16,8 @@ from qiskit import QuantumRegister, ClassicalRegister, QuantumCircuit
 from qiskit.providers.aer.noise import NoiseModel
 from qiskit.providers.ibmq.ibmqbackend import IBMQBackend
 from qiskit.tools.monitor import job_monitor
+from qiskit.tools.visualization import plot_histogram
+from Optimizer.Nelder_Mead import minimizeEnergyObjective
 
 
 def gen_coreset_graph(coreset=None, metric='dot'):
@@ -101,18 +103,6 @@ def plot_coreset_graph(coreset_points, G):
     plt.show()
     plt.close()
 
-    # Generate a networkx graph with correct edge weights
-    n = len(coreset_points)
-    G = nx.complete_graph(n)
-    for edge in G.edges():
-        v_i = edge[0]
-        v_j = edge[1]
-        w_i = coreset_points[v_i][0]
-        w_j = coreset_points[v_j][0]
-        #dot_prod = np.dot(coreset_points[v_i][1], coreset_points[v_j][1])
-        dist = np.linalg.norm(coreset_points[v_i][1] - coreset_points[v_j][1])
-        G[v_i][v_j]['weight'] = w_i * w_j * dist
-
     # Generate plot of the Graph
     colors = ['r' for node in G.nodes()]
     default_axes = plt.axes(frameon=False)
@@ -147,6 +137,7 @@ def evolve_cost(c, angle, G, ising=False, qbit_map=None):
     -------
     Nothing, all gates added inplace
     """
+
     if qbit_map is None:
         for edge in G.edges():
             i = edge[0]
@@ -160,22 +151,34 @@ def evolve_cost(c, angle, G, ising=False, qbit_map=None):
                 c.cx(i,j)
                 c.rz(2*phi, j)
                 c.cx(i,j)
-    else:
-        # implement the swap network
+    else: # implement the swap network
+        # The covers indicate which qubits should be swapped at each layer
         cover_a = [(idx-1, idx) for idx in range(1,len(qbit_map),2)]
         cover_b = [(idx-1, idx) for idx in range(2,len(qbit_map),2)]
+
+        # We also need to keep track of where the "virtual" qubits are so
+        # that we use the correct edge weight when computing phi
+        # virtual_map -> indices indicate physical qubit, values indicate
+        # the virtual qubit residing there.
+        virtual_map = np.arange(len(qbit_map))
+
         for l, layer in enumerate(range(len(G.nodes))):
             cover = [cover_a, cover_b][layer % 2]
             for pair in cover:
-                i, j = pair
-                phi = angle * G[i][j]['weight']
+                i, j = pair # swap physical qubits i and j
+                # get the edge weight using the virtual_map
+                v_i = virtual_map[i]
+                v_j = virtual_map[j]
+                phi = angle * G[v_i][v_j]['weight']
                 c.cx(i, j)
                 c.rz(2*phi, j)
                 if l == len(G.nodes) - 1:
-                    c.cx(i, j)
+                    c.cx(i, j) # the final SWAP doesn't need to happen
                 else:
                     c.cx(j, i)
                     c.cx(i, j)
+                # update the virtual_map with the current SWAP
+                virtual_map[j], virtual_map[i] = virtual_map[i], virtual_map[j]
 
 
 def evolve_driver(c, angle):
@@ -282,6 +285,9 @@ def cost_function_C(x, G):
     E = G.edges()
     if( len(x) != len(G.nodes())):
         return np.nan
+    if type(x) is str:
+        x = list(x)
+        x = [int(xx) for xx in x]
 
     C = 0;
     for edge in E:
@@ -290,6 +296,7 @@ def cost_function_C(x, G):
         w = G[e1][e2]['weight']
         # Equation 6 in Overleaf Paper
         C = C + w*(1 - 2*(x[e1]*(1-x[e2]) + x[e2]*(1-x[e1])))
+        #C = C - w * (x[e1]*(1-x[e2]) + x[e2]*(1-x[e1]))
 
     return C
 
@@ -367,11 +374,13 @@ def energy_landscape(P, step_size, shots, gammaLim, betaLim, G,
 
             # Simulate, either noisy or noiseless
             simulate = execute_func(qaoa_circ, backend, shots)
-            counts = simulate.result().get_counts()
+            raw_counts = simulate.result().get_counts()
 
             # reorder the outputs if the swap network was used
             if reorder is True:
-                counts = reorder_bitstrings(P, len(G.nodes), copy(counts))
+                counts = reorder_bitstrings(P, len(G.nodes), copy(raw_counts))
+            else:
+                counts = raw_counts
 
             # Save the counts, indexed by the current gamma and beta values
             bitstrings['{:.3f}{:.3f}'.format(gamma, beta)] = counts
@@ -399,7 +408,7 @@ def energy_landscape(P, step_size, shots, gammaLim, betaLim, G,
 
 
 def plot_energy_landscape(step_size, gammaLim, betaLim, estC, bitstrings, shots,
-                          coreset_points, savefigs=False):
+                          coreset_points, G, savefigs=None):
     # Plot the energy landscape
     a_gamma = np.arange(gammaLim[0], gammaLim[1], step_size)
     a_beta  = np.arange(betaLim[0], betaLim[1], step_size)
@@ -417,7 +426,7 @@ def plot_energy_landscape(step_size, gammaLim, betaLim, estC, bitstrings, shots,
     ax.zaxis.set_major_locator(LinearLocator(3))
     ax.zaxis.set_major_formatter(FormatStrFormatter('%.02f'))
     plt.tight_layout()
-    if savefigs: plt.savefig('qaoa_energylandscape.pdf')
+    if savefigs is not None: plt.savefig('qaoa_energylandscape_{}.pdf'.format(savefigs))
     plt.show()
     plt.close()
 
@@ -435,11 +444,11 @@ def plot_energy_landscape(step_size, gammaLim, betaLim, estC, bitstrings, shots,
     print('The maximal expectation value (avg over {} shots) is:  C = {:.3f}'.format(shots, np.amax(estC)))
     print('This is attained for gamma = {0:.3f} and beta = {1:.3f}'.format(gamma,beta))
     print('The 4 most common partitionings produced at this point were:')
-    print('{}: {:.2f}%, {}: {:.2f}%, {}: {:.2f}%, {}: {:.2f}%'.format(
-                                         bs_list[0][0], 100*bs_list[0][1]/shots,
-                                         bs_list[1][0], 100*bs_list[1][1]/shots,
-                                         bs_list[2][0], 100*bs_list[2][1]/shots,
-                                         bs_list[3][0], 100*bs_list[3][1]/shots))
+    print('{}: {:.2f}% ({}), {}: {:.2f}% ({}), {}: {:.2f}% ({}), {}: {:.2f}% ({})'.format(
+       bs_list[0][0], 100*bs_list[0][1]/shots, cost_function_C(bs_list[0][0], G),
+       bs_list[1][0], 100*bs_list[1][1]/shots, cost_function_C(bs_list[1][0], G),
+       bs_list[2][0], 100*bs_list[2][1]/shots, cost_function_C(bs_list[2][0], G),
+       bs_list[3][0], 100*bs_list[3][1]/shots, cost_function_C(bs_list[3][0], G)))
 
     # Plot the centroids according to the optimal partitioning
     opt_partition = bs_list[0][0]
@@ -462,14 +471,24 @@ def plot_energy_landscape(step_size, gammaLim, betaLim, estC, bitstrings, shots,
     mu_minus = np.sum([point[0]*point[1] for point in S_minus], axis=0) / np.sum([point[0] for point in S_minus])
     print('mu_plus:',mu_plus)
     print('mu_minus:',mu_minus)
-    plt.scatter(mu_plus[0], mu_plus[1], c=c_plus, marker='*')
-    plt.scatter(mu_minus[0], mu_minus[1], c=c_minus, marker='*')
+    try:
+        plt.scatter(mu_plus[0], mu_plus[1], c=c_plus, marker='*')
+    except:
+        mu_plus = None
+    try:
+        plt.scatter(mu_minus[0], mu_minus[1], c=c_minus, marker='*')
+    except:
+        mu_minus = None
 
     plt.hlines(0, np.amin(xx), np.amax(xx), ls='--')
     plt.vlines(0, np.amin(yy), np.amax(yy), ls='--')
-    if savefigs: plt.savefig('qaoa_clustering.pdf')
+    if savefigs is not None: plt.savefig('qaoa_clustering_{}.pdf'.format(savefigs))
     plt.show()
     plt.close()
+
+    # Plot the histogram of measurement counts at the optimal gamma-beta pair
+    return optimal_counts
+
 
 
 def plot_partition(bitstring, coreset_points):
@@ -523,10 +542,13 @@ def hardware_execution(device, P, gammaLim, betaLim, step_size, G, shots):
 
     # generate a qaoa circuit for each angle pair
     circuits = []
+    all_angle_pairs = {}
     for gamma, beta in angle_pairs:
         circ, initial_layout = gen_complete_qaoa_circ(P, [gamma], [beta], G,
                                    topology=device.configuration().coupling_map)
         circuits.append(circ)
+        # store the gamma-beta pair and the circuit name together
+        all_angle_pairs[circ.name] = (gamma, beta)
     print('Generated {} circuits to cover gamma:{} -> {:.2f}, beta:{} -> {:.2f}'.format(
            len(circuits), *gammaLim, *betaLim))
 
@@ -540,31 +562,34 @@ def hardware_execution(device, P, gammaLim, betaLim, step_size, G, shots):
 
     # execute the jobs
     print('LAUNCHING JOBS')
-    all_raw_counts = []
+    all_raw_counts = {}
     for num, batch in enumerate(batches):
-        print('Executing job {}'.format(num))
+        print('Executing job {}/{}'.format(num+1, len(batches)))
         job = execute(batch, backend=device, shots=shots,
                       initial_layout=initial_layout)
         job_monitor(job)
-        raw_counts = job.result().get_counts()
-        all_raw_counts.extend(raw_counts)
+        for experiment in batch:
+            raw_counts = job.result().get_counts(experiment=experiment)
+            all_raw_counts[experiment.name] = raw_counts
 
-        # pickle the raw counts
-        pklFile = open(savedir+savename+'_rawcounts_job{}.pickle'.format(num), 'wb')
-        pickle.dump(raw_counts, pklFile)
-        pklFile.close()
-        print('raw counts saved')
+    # pickle the raw counts
+    pklFile = open(savedir+savename+'_rawcounts.pickle', 'wb')
+    pickle.dump(all_raw_counts, pklFile)
+    pklFile.close()
+    print('raw counts saved')
 
     # reorder the raw counts
-    good_counts = []
-    for old_counts in all_raw_counts:
+    good_counts = {}
+    for circkey in all_raw_counts.keys():
+        old_counts = all_raw_counts[circkey]
         new_counts = reorder_bitstrings(P, len(G.nodes), old_counts)
-        good_counts.append(new_counts)
+        good_counts[circkey] = new_counts
 
     # match the gamma-beta pairs with the execution counts
     execution_dict = {}
-    for pair, run in zip(angle_pairs, good_counts):
-        execution_dict['{:.3f}{:.3f}'.format(pair[0], pair[1])] = run
+    for circkey in all_angle_pairs.keys():
+        gamma, beta = all_angle_pairs[circkey]
+        execution_dict['{:.3f}{:.3f}'.format(gamma, beta)] = good_counts[circkey]
 
     # pickle the execution dictionary
     pklFile = open(savedir+savename+'_fullrun.pickle', 'wb')
@@ -615,11 +640,77 @@ def compute_C_from_fullrun(fullrun, gammaLim, betaLim, step_size, G, shots):
     return estC
 
 
+def sim_and_evaluate(circ, P, G, shots, reorder, device=None):
+    """
+    """
+    backend = Aer.get_backend('qasm_simulator')
+
+    # Have the option of conducting noisy simulation
+    if device is None:
+        def execute_func(circ, backend, shots):
+            return execute(circ, backend=backend, shots=shots)
+    else:
+        assert isinstance(device, IBMQBackend), 'device must be an IBMQBackend'
+        noise_model = NoiseModel.from_backend(device)
+        basis_gates = device.configuration().basis_gates
+        coupling_map= device.configuration().coupling_map
+        props = device.properties()
+        def execute_func(circ, backend, shots):
+            return execute(circ, backend=backend, shots=shots,
+                    basis_gates=basis_gates, noise_model=noise_model,
+                    coupling_map=coupling_map, backend_properties=props)
+
+    # execute the circuit
+    simulate = execute_func(circ, backend, shots)
+    raw_counts = simulate.result().get_counts()
+
+    # reorder the outputs if the swap network was used
+    if reorder is True:
+        counts = reorder_bitstrings(P, len(G.nodes), copy(raw_counts))
+    else:
+        counts = raw_counts
+
+    # Evaluate the data from the simulator
+    tot_C = 0
+    for sample in list(counts.keys()):
+        # use the sampled bitstring x to compute C(x)
+        x = [int(num) for num in list(sample)]
+        tmp_eng = cost_function_C(x,G)
+
+        # compute the expectation value
+        tot_C = tot_C + counts[sample]*tmp_eng
+
+    # average the cost function over the number of shots
+    avg_C = tot_C/shots
+
+    return avg_C
 
 
+def optimize_qaoa(init_params, num_params, shots, P, G, topology, device=None,
+                  delta=1.7, tol=10e-6, no_improv_break=15, max_iter=5000):
+    """
+    """
+    def f(params):
+        gamma, beta = params
+        # Generate a circuit for the qaoa
+        circ, _ = gen_complete_qaoa_circ(P, [gamma], [beta], G,
+                                         topology=topology)
 
+        if len(topology) > 0:
+            reorder = True
+        else:
+            reorder = False
 
+        # Compute the cost function
+        energy = sim_and_evaluate(circ, P, G, shots, reorder, device=device)
 
+        # the Nelder-Mead optimizer is minimizing the energy, so we return
+        # the negative of the QAOA cost function
+        return -1*energy
 
+    opt_params, opt_cost = minimizeEnergyObjective(f, init_params, num_params,
+                                          delta, tol, no_improv_break, max_iter)
+
+    return opt_params, opt_cost
 
 
