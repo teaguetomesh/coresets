@@ -92,18 +92,19 @@ def gen_coreset_graph(coreset=None, metric='dot'):
     return coreset, G, H
 
 
-def plot_coreset_graph(coreset_points, G):
+def plot_coreset_graph(coreset_points, G, twoD=True):
     """
     Plot the coreset points on the x-y plane, and draw the networkX graph
     """
     # Plot the coreset points
-    xx = [cp[1][0] for cp in coreset_points]
-    yy = [cp[1][1] for cp in coreset_points]
-    plt.scatter(xx, yy)
-    plt.hlines(0, np.amin(xx), np.amax(xx), ls='--')
-    plt.vlines(0, np.amin(yy), np.amax(yy), ls='--')
-    plt.show()
-    plt.close()
+    if twoD:
+        xx = [cp[1][0] for cp in coreset_points]
+        yy = [cp[1][1] for cp in coreset_points]
+        plt.scatter(xx, yy)
+        plt.hlines(0, np.amin(xx), np.amax(xx), ls='--')
+        plt.vlines(0, np.amin(yy), np.amax(yy), ls='--')
+        plt.show()
+        plt.close()
 
     # Generate plot of the Graph
     colors = ['r' for node in G.nodes()]
@@ -715,4 +716,13 @@ def optimize_qaoa(init_params, num_params, shots, P, G, topology, device=None,
 
     return opt_params, opt_cost
 
+
+def compute_centroids(partition, coreset):
+    S_plus = [coreset[i] for i in range(len(partition)) if partition[i] == '1']
+    S_minus = [coreset[i] for i in range(len(partition)) if partition[i] == '0']
+    mu_plus = np.sum([point[0]*point[1] for point in S_plus], axis=0) / np.sum([point[0] for point in S_plus])
+    mu_minus = np.sum([point[0]*point[1] for point in S_minus], axis=0) / np.sum([point[0] for point in S_minus])
+    print('mu_plus:', mu_plus)
+    print('mu_minus:', mu_minus)
+    return [mu_plus, mu_minus]
 
