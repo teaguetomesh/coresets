@@ -1,4 +1,6 @@
 import numpy as np
+from sklearn.cluster import KMeans
+
 
 def dist_to_B(x, B, return_closest_index=False):
     min_dist = np.inf
@@ -34,20 +36,18 @@ def Algorithm2(data_vectors, k, B, m):
     alpha = 16 * (np.log2(k) + 2)
     
 
-    B_i_totals = [0] * k
-    B_i = [np.empty_like(data_vectors) for _ in range(k)]
+    B_i_totals = [0] * len(B)
+    B_i = [np.empty_like(data_vectors) for _ in range(len(B))]
     for x in data_vectors:
         _, closest_index = dist_to_B(x, B, return_closest_index=True)
         B_i[closest_index][B_i_totals[closest_index]] = x
         B_i_totals[closest_index] += 1        
         
-    # note that there is ambiguity between Lemma 2.2 and Algorithm 2
-    # for the following few lines. E.g. should the distance be squared?
     c_phi = sum([dist_to_B(x, B) ** 2 for x in data_vectors]) / len(data_vectors)
 
     p = np.zeros(len(data_vectors))
     
-    sum_dist = {0: 0, 1: 0}
+    sum_dist = {i: 0 for i in range(len(B))}
     for i, x in enumerate(data_vectors):
         dist, closest_index = dist_to_B(x, B, return_closest_index=True)
         sum_dist[closest_index] += dist ** 2
@@ -79,14 +79,14 @@ def BFL16(P, B, m):
     num_points_in_clusters = {i: 0 for i in range(len(B))}
     sum_distance_to_closest_cluster = 0
     for p in P:
-        _, closest_index = dist_to_B(p, B, return_closest_index=True)
+        min_dist, closest_index = dist_to_B(p, B, return_closest_index=True)
         num_points_in_clusters[closest_index] += 1
-        sum_distance_to_closest_cluster += dist_to_B(p, B) ** 2
+        sum_distance_to_closest_cluster += min_dist ** 2
 
     Prob = np.zeros(len(P))
     for i, p in enumerate(P):
-        _, closest_index = dist_to_B(p, B, return_closest_index=True)
-        Prob[i] += dist_to_B(p, B) ** 2 / (2 * sum_distance_to_closest_cluster)
+        min_dist, closest_index = dist_to_B(p, B, return_closest_index=True)
+        Prob[i] += min_dist ** 2 / (2 * sum_distance_to_closest_cluster)
         Prob[i] += 1 / (2 * len(B) * num_points_in_clusters[closest_index])
 
     assert 0.999 <= sum(Prob) <= 1.001, 'sum(Prob) = %s; the algorithm should automatically '\
@@ -102,3 +102,21 @@ def get_cost(data_vectors, B):
     for x in data_vectors:
         cost += dist_to_B(x, B) ** 2
     return cost
+
+
+def kmeans_cost(data_vectors, coreset_vectors, sample_weight=None):
+    kmeans = KMeans(n_clusters=2).fit(coreset_vectors, sample_weight=sample_weight)
+    return get_cost(data_vectors, kmeans.cluster_centers_)
+
+
+def get_bestB(data_vectors, num_runs, k):
+    bestB, bestB_cost = None, np.inf
+
+    # pick B with least error from num_runs runs
+    for _ in range(num_runs):
+        B = Algorithm1(data_vectors, k=k)
+        cost = get_cost(data_vectors, B)
+        if cost < bestB_cost:
+            bestB, bestB_cost = B, cost
+
+    return bestB
