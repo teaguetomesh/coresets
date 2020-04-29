@@ -1,7 +1,7 @@
 """
 A set of functions for solving the k-means clustering problem using QAOA
 """
-import sys
+import sys, os
 import pickle
 import datetime
 import numpy as np
@@ -17,6 +17,8 @@ from qiskit.providers.aer.noise import NoiseModel
 from qiskit.providers.ibmq.ibmqbackend import IBMQBackend
 from qiskit.tools.monitor import job_monitor
 from qiskit.tools.visualization import plot_histogram
+cwd = os.getcwd()
+sys.path.append('/'.join(cwd.split('/')[:-1])+'/')
 from Optimizer.Nelder_Mead import minimizeEnergyObjective
 
 
