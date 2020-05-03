@@ -4,6 +4,12 @@ coresetEnv/
 papers/
 kMeans/Datasets/Catdog/
 kMeans/Datasets/val2017/
+kMeans/Datasets/HTRU_2.csv
+kMeans/Datasets/cifar-10-batches-py/
+kMeans/Datasets/epilepsy.csv
+kMeans/Datasets/unbalance.txt
+kMeans/Datasets/yeast.txt
+
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
