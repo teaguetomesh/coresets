@@ -696,7 +696,7 @@ def optimize_qaoa(init_params, num_params, shots, P, G, topology, device=None,
     def f(params):
         gamma, beta = params
         # Generate a circuit for the qaoa
-        circ, _ = gen_complete_qaoa_circ(P, [gamma], [beta], G,
+        circ = gen_complete_qaoa_circ(P, [gamma], [beta], G,
                                          topology=topology)
 
         if len(topology) > 0:
@@ -709,7 +709,7 @@ def optimize_qaoa(init_params, num_params, shots, P, G, topology, device=None,
 
         # the Nelder-Mead optimizer is minimizing the energy, so we return
         # the negative of the QAOA cost function
-        return -1*energy
+        return 1*energy
 
     opt_params, opt_cost = minimizeEnergyObjective(f, init_params, num_params,
                                           delta, tol, no_improv_break, max_iter)
