@@ -149,3 +149,19 @@ dmypy.json
 
 # Cython debug symbols
 cython_debug/
+.DS_Store
+HardwareRunPickles
+Argonne_Presentation
+Electronics_Submission
+AQAI_Submission
+EPiQC_Presentation
+Figures
+kMeans/Figures/
+kMeans/HardwareResults
+kMeans/OriginalPaperFigures
+kMeans/Untitled.ipynb
+kMeans/*.pdf
+*.pdf
+*.jpg
+*.jp2
+*.png
