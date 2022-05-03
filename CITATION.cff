@@ -1,0 +1,10 @@
+cff-version: 0.0.1
+message: "If you use this software, please cite it as below."
+authors:
+  - family-names: Tomesh, Gokhale, Anschuetz
+    given-names: Teague, Pranav, Eric
+    orcid: https://orcid.org/0000-0003-2610-8661
+title: "Coresets"
+version: 0.0.46
+doi: 10.3390/electronics10141690
+date-released: 2021-07-09
