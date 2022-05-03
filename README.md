@@ -1,7 +1,7 @@
 # coresets
 
 # Coreset Clustering on Small Quantum Computers
-This code was used to generate the data and plots in the paper: https://arxiv.org/abs/2004.14970. This work explores the use of coresets - small sets of data which accurately summarize a larger data set - to fit large machine learning problems onto small quantum computers.
+This code was used to generate the data and plots in the paper: https://doi.org/10.3390/electronics10141690. This work explores the use of coresets - small sets of data which accurately summarize a larger data set - to fit large machine learning problems onto small quantum computers.
 
 The bulk on the code is contained in the `kMeans` directory. The benchmark data sets used in the paper are contained in the `Datasets` directory stored as binary `.npy` files (see https://numpy.org/doc/stable/reference/generated/numpy.load.html).
 
